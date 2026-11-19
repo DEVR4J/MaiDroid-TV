@@ -1,0 +1,48 @@
+name: Build APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Works whether you commit the unzipped project, a KaiDroidTV/ folder, or just KaiDroidTV.zip
+      - name: Locate project
+        id: proj
+        run: |
+          if [ -f settings.gradle.kts ]; then
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          elif [ -f KaiDroidTV/settings.gradle.kts ]; then
+            echo "dir=KaiDroidTV" >> "$GITHUB_OUTPUT"
+          elif [ -f KaiDroidTV.zip ]; then
+            unzip -q KaiDroidTV.zip -d _build
+            echo "dir=_build/KaiDroidTV" >> "$GITHUB_OUTPUT"
+          else
+            echo "Project not found (need settings.gradle.kts, KaiDroidTV/ or KaiDroidTV.zip)"; exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      # The project has no gradlew, so use a Gradle install instead of the wrapper
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      - name: Build debug APK
+        working-directory: ${{ steps.proj.outputs.dir }}
+        run: gradle assembleDebug --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KaiDroidTV-debug-apk
+          path: ${{ steps.proj.outputs.dir }}/app/build/outputs/apk/debug/*.apk
